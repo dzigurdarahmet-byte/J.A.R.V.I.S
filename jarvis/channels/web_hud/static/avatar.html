@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>JARVIS — Hologram Avatar</title>
+<style>
+  :root {
+    --bg: #08090c;
+    --bg-2: #11141b;
+    --line: #1f2530;
+    --txt: #e6e9ef;
+    --muted: #8a93a6;
+    --jarvis: #6ea8ff;
+    --cyan: #5ffbff;
+    --warn: #ffb86b;
+    --err: #ff6b6b;
+    --ok: #5ee0a2;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: var(--txt);
+    font-family: -apple-system, "SF Pro", "Segoe UI", Roboto, sans-serif; overflow: hidden; }
+  #stage { position: absolute; inset: 0; }
+  #canvas { width: 100%; height: 100%; display: block; }
+
+  /* Holographic post-effect overlay поверх canvas */
+  .holo-overlay { position: absolute; inset: 0; pointer-events: none; mix-blend-mode: screen; }
+  .scanlines {
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(95, 251, 255, 0.0) 0px,
+      rgba(95, 251, 255, 0.0) 2px,
+      rgba(95, 251, 255, 0.06) 3px,
+      rgba(95, 251, 255, 0.0) 4px
+    );
+    animation: scroll-scanlines 8s linear infinite;
+  }
+  @keyframes scroll-scanlines {
+    from { background-position: 0 0; }
+    to { background-position: 0 100px; }
+  }
+  .vignette {
+    background: radial-gradient(ellipse at center,
+      rgba(0,0,0,0) 40%,
+      rgba(0, 20, 30, 0.6) 100%);
+    mix-blend-mode: multiply;
+  }
+  .flicker {
+    background: rgba(95, 251, 255, 0.04);
+    animation: flicker-anim 0.18s steps(2) infinite;
+  }
+  @keyframes flicker-anim {
+    0% { opacity: 0.4; }
+    50% { opacity: 0.8; }
+    100% { opacity: 0.5; }
+  }
+  .glitch-burst {
+    background: linear-gradient(180deg, transparent 0%, rgba(95, 251, 255, 0.18) 50%, transparent 100%);
+    opacity: 0;
+    transition: opacity 0.08s ease-out;
+  }
+  .glitch-burst.fire { opacity: 1; animation: glitch-fire 0.3s ease-out; }
+  @keyframes glitch-fire {
+    0% { transform: translateY(0); opacity: 0.8; }
+    50% { transform: translateY(8px); opacity: 0.4; }
+    100% { transform: translateY(0); opacity: 0; }
+  }
+
+  /* Controls panel */
+  #panel {
+    position: absolute; left: 16px; bottom: 16px; right: 16px;
+    background: rgba(17, 20, 27, 0.92);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 16px;
+    backdrop-filter: blur(8px);
+    z-index: 5;
+  }
+  #panel .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  #panel input[type="text"] {
+    flex: 1; min-width: 200px;
+    background: var(--bg); border: 1px solid var(--line); color: var(--txt);
+    padding: 10px 14px; font-size: 14px; border-radius: 6px; outline: none;
+    font-family: inherit;
+  }
+  #panel input[type="text"]:focus { border-color: var(--jarvis); }
+  #panel button {
+    background: var(--jarvis); color: var(--bg); border: 0;
+    padding: 10px 18px; font-weight: 600; cursor: pointer; border-radius: 6px;
+    font-family: inherit; font-size: 14px;
+  }
+  #panel button:hover { filter: brightness(1.1); }
+  #panel button:disabled { background: var(--line); color: var(--muted); cursor: not-allowed; }
+  #panel .secondary { background: var(--line); color: var(--txt); }
+
+  #avatar-url-row { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+  #avatar-url-row label { font-size: 12px; color: var(--muted); }
+  #avatar-url { flex: 1; font-family: "JetBrains Mono", monospace; font-size: 11px; }
+  #status {
+    position: absolute; top: 16px; right: 16px;
+    background: rgba(17, 20, 27, 0.92); border: 1px solid var(--line); border-radius: 8px;
+    padding: 8px 14px; font-size: 12px; color: var(--muted);
+    font-family: "JetBrains Mono", monospace; z-index: 5;
+  }
+  #status .ok { color: var(--ok); }
+  #status .err { color: var(--err); }
+  #status .warn { color: var(--warn); }
+
+  #brand {
+    position: absolute; top: 16px; left: 16px;
+    z-index: 5; color: var(--cyan);
+    font-size: 15px; letter-spacing: 0.18em; font-weight: 600;
+    text-shadow: 0 0 12px var(--cyan);
+  }
+
+  /* Loading overlay */
+  #loading {
+    position: absolute; inset: 0; background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 16px; z-index: 10;
+    transition: opacity 0.5s ease-out;
+  }
+  #loading.hidden { opacity: 0; pointer-events: none; }
+  .spinner {
+    width: 64px; height: 64px; border-radius: 50%;
+    border: 3px solid var(--line);
+    border-top-color: var(--cyan);
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loading .text { color: var(--muted); font-size: 13px; letter-spacing: 0.08em; }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <canvas id="canvas"></canvas>
+  <div class="holo-overlay scanlines"></div>
+  <div class="holo-overlay flicker"></div>
+  <div class="holo-overlay vignette"></div>
+  <div class="holo-overlay glitch-burst" id="glitch"></div>
+</div>
+
+<div id="brand">🔵 J.A.R.V.I.S. — AVATAR</div>
+<div id="status">avatar: <span id="avatar-status" class="warn">loading…</span></div>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <div class="text">ожидание GLB URL…</div>
+</div>
+
+<div id="setup" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:18px;z-index:9;background:rgba(8,9,12,0.95);text-align:center;padding:40px">
+  <div style="font-size:18px;color:var(--cyan);letter-spacing:0.05em">выбери аватар</div>
+  <div style="max-width:600px;color:var(--muted);font-size:13px;line-height:1.7">
+    Три варианта (от простого к крутому):
+  </div>
+
+  <!-- Вариант 1: встроенный default -->
+  <button id="setup-default" style="background:#6ea8ff;color:#08090c;border:0;padding:14px 28px;font-weight:600;cursor:pointer;border-radius:6px;font-size:14px">
+    1. Использовать встроенный аватар (рекомендую — работает сразу)
+  </button>
+
+  <!-- Вариант 2: GLB файл с диска -->
+  <div style="display:flex;gap:8px;width:560px;max-width:90vw;align-items:center">
+    <input id="setup-file" type="file" accept=".glb" style="flex:1;background:#08090c;border:1px solid #1f2530;color:#e6e9ef;padding:10px 12px;border-radius:6px;font-family:inherit;font-size:12px"/>
+    <button id="setup-file-go" style="background:#1f2530;color:#e6e9ef;border:0;padding:12px 22px;cursor:pointer;border-radius:6px">2. Загрузить .glb с диска</button>
+  </div>
+
+  <!-- Вариант 3: URL (если есть VPN) -->
+  <div style="margin-top:8px;width:560px;max-width:90vw">
+    <div style="font-size:11px;color:var(--muted);margin-bottom:6px;text-align:left">
+      3. URL модели (Ready Player Me блочится в РФ — нужен VPN; либо <a href="https://avaturn.me" target="_blank" style="color:var(--jarvis)">avaturn.me</a> работает без VPN)
+    </div>
+    <div style="display:flex;gap:8px">
+      <input id="setup-url" type="text" placeholder="https://models.readyplayer.me/... или https://api.avaturn.me/..." style="flex:1;background:#08090c;border:1px solid #1f2530;color:#e6e9ef;padding:10px 14px;border-radius:6px;font-family:'JetBrains Mono',monospace;font-size:11px;outline:none"/>
+      <button id="setup-go" style="background:#1f2530;color:#e6e9ef;border:0;padding:12px 22px;cursor:pointer;border-radius:6px">Загрузить</button>
+    </div>
+  </div>
+
+  <div style="margin-top:12px;font-size:11px;color:var(--muted)">
+    Где взять свой аватар: <a href="https://avaturn.me" target="_blank" style="color:var(--jarvis)">avaturn.me</a> (работает в РФ) ·
+    <a href="https://www.mixamo.com" target="_blank" style="color:var(--jarvis)">mixamo.com</a> (нужен Adobe аккаунт) ·
+    готовые GLB модели можно качать на <a href="https://sketchfab.com" target="_blank" style="color:var(--jarvis)">sketchfab.com</a>
+  </div>
+</div>
+
+<div id="panel">
+  <div class="row">
+    <input id="text" type="text" placeholder="Что Джарвис должен сказать?" autocomplete="off"/>
+    <button id="speak-btn">Озвучить</button>
+    <button id="stop-btn" class="secondary">Стоп</button>
+  </div>
+  <div class="row" style="margin-top:8px;font-size:12px;color:var(--muted)">
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+      <input id="auto-toggle" type="checkbox" checked style="cursor:pointer"/>
+      <span>Авто-озвучка ответов</span>
+    </label>
+    <select id="auto-scope" style="background:var(--bg);color:var(--txt);border:1px solid var(--line);border-radius:4px;padding:4px 8px;font-family:inherit;font-size:12px;cursor:pointer">
+      <option value="web_hud">только из HUD</option>
+      <option value="all">все каналы (HUD + Telegram + voice)</option>
+    </select>
+    <span id="ws-status" style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:11px">ws: <span id="ws-state" class="warn">connecting…</span></span>
+  </div>
+  <div id="avatar-url-row">
+    <label>RPM GLB URL:</label>
+    <input id="avatar-url" type="text" value=""/>
+    <button id="reload-avatar" class="secondary" style="padding:6px 12px;font-size:11px">⟳</button>
+    <span style="font-size:11px;color:var(--muted)">создать новый: <a href="https://demo.readyplayer.me/avatar?frameApi" target="_blank" style="color:var(--jarvis)">readyplayer.me</a></span>
+  </div>
+</div>
+
+<!-- Three.js + GLTFLoader через import map -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const canvas = document.getElementById('canvas');
+const textInput = document.getElementById('text');
+const speakBtn = document.getElementById('speak-btn');
+const stopBtn = document.getElementById('stop-btn');
+const avatarUrlEl = document.getElementById('avatar-url');
+const reloadBtn = document.getElementById('reload-avatar');
+const loadingEl = document.getElementById('loading');
+const statusEl = document.getElementById('avatar-status');
+const glitchEl = document.getElementById('glitch');
+
+// ─── Three.js setup ──────────────────────────────────────────────
+const scene = new THREE.Scene();
+scene.background = null;  // прозрачный (HTML фон проявится)
+
+const camera = new THREE.PerspectiveCamera(28, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(0, 1.62, 0.6);  // на уровне глаз, близко к лицу
+camera.lookAt(0, 1.62, 0);
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+renderer.setPixelRatio(window.devicePixelRatio || 1);
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+// Cyan rim light для голограммного эффекта
+const rim1 = new THREE.DirectionalLight(0x5ffbff, 2.2);
+rim1.position.set(2, 1.5, 1);
+scene.add(rim1);
+const rim2 = new THREE.DirectionalLight(0x6ea8ff, 1.6);
+rim2.position.set(-2, 1.0, 1.5);
+scene.add(rim2);
+const fill = new THREE.HemisphereLight(0x88ccff, 0x000000, 0.4);
+scene.add(fill);
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ─── Аватар state ────────────────────────────────────────────────
+let avatarRoot = null;
+let headMesh = null;        // primary SkinnedMesh для чтения dictionary (для совместимости имён)
+let morphMeshes = [];       // ВСЕ skinned meshes с morphs — RPM делит blendshapes между EyeLeft/EyeRight/Wolf3D_Head/Wolf3D_Teeth и каждый mesh нужно анимировать отдельно
+let morphIdx = {};          // shape name → index в morphTargetInfluences (одинаковый порядок во всех meshes)
+let visemeTimeline = [];    // массив {t, viseme, weight}
+let speakStartTs = 0;       // когда мы начали играть аудио (performance.now / 1000)
+let speakDurationSec = 0;
+let audioEl = null;
+let audioCtx = null;
+let analyser = null;
+let analyserData = null;
+
+// Маппинг наших viseme-кодов в blendshapes аватара.
+// Приоритет:
+//   1. Native RPM viseme_* blendshapes (viseme_PP / viseme_aa / viseme_O / ...) —
+//      RPM специально создал их для идеального lip sync (открывают рот так,
+//      как реальный фонетист бы сказал). Если они есть в модели — используем их.
+//   2. Fallback на комбинацию ARKit-shapes (jawOpen + mouthFunnel + ...) для
+//      моделей без RPM viseme расширения.
+const VISEME_TO_RPM = {
+  sil: 'viseme_sil',
+  aa:  'viseme_aa',
+  O:   'viseme_O',
+  I:   'viseme_I',
+  PP:  'viseme_PP',
+  FF:  'viseme_FF',
+  DD:  'viseme_DD',
+  kk:  'viseme_kk',
+  CH:  'viseme_CH',
+  nn:  'viseme_nn',
+};
+const VISEME_TO_BLENDS = {
+  sil: { jawOpen: 0.0, mouthClose: 1.0 },
+  aa:  { jawOpen: 0.55, mouthFunnel: 0.15 },
+  O:   { jawOpen: 0.35, mouthFunnel: 0.55, mouthPucker: 0.5 },
+  I:   { jawOpen: 0.12, mouthStretchLeft: 0.45, mouthStretchRight: 0.45, mouthSmileLeft: 0.15, mouthSmileRight: 0.15 },
+  PP:  { jawOpen: 0.0, mouthPressLeft: 0.5, mouthPressRight: 0.5, mouthRollLower: 0.3 },
+  FF:  { jawOpen: 0.08, mouthLowerDownLeft: 0.35, mouthLowerDownRight: 0.35 },
+  DD:  { jawOpen: 0.15, mouthShrugLower: 0.2 },
+  kk:  { jawOpen: 0.22, mouthFunnel: 0.15 },
+  CH:  { jawOpen: 0.18, mouthPucker: 0.35, mouthFunnel: 0.2 },
+  nn:  { jawOpen: 0.08, mouthShrugLower: 0.15 },
+};
+let useRpmVisemes = false;  // выставится в loadAvatar если все viseme_* найдены
+
+// Текущие веса (EMA сглаживание для плавности)
+const currentWeights = {};
+const SMOOTHING = 0.35;  // 0 = мгновенно, 1 = не двигается
+
+// ─── Эмоции лица (brow/cheek/smile) ──────────────────────────────
+// Эти blendshapes интерполируются ОТДЕЛЬНО от visemes — face-shapes
+// держатся постоянно во время реплики, mouth-shapes из эмоции
+// применяются только когда аватар не говорит (audio idle), иначе
+// конфликт с lip sync.
+const EMOTION_TO_BLENDS = {
+  joy: {
+    face:  { browInnerUp: 0.10, cheekSquintLeft: 0.35, cheekSquintRight: 0.35,
+             eyeSquintLeft: 0.18, eyeSquintRight: 0.18 },
+    mouth: { mouthSmileLeft: 0.40, mouthSmileRight: 0.40 },
+  },
+  curious: {
+    face:  { browOuterUpLeft: 0.40, browOuterUpRight: 0.40, browInnerUp: 0.15 },
+    mouth: { jawOpen: 0.05 },
+  },
+  concerned: {
+    face:  { browInnerUp: 0.45, browDownLeft: 0.15, browDownRight: 0.15 },
+    mouth: { mouthFrownLeft: 0.25, mouthFrownRight: 0.25 },
+  },
+  serious: {
+    face:  { browDownLeft: 0.30, browDownRight: 0.30 },
+    mouth: { mouthPressLeft: 0.12, mouthPressRight: 0.12 },
+  },
+  neutral: {
+    face:  {},
+    mouth: {},
+  },
+};
+
+let currentEmotion = 'neutral';
+let emotionFadeTarget = 1.0;  // 0..1 — общая интенсивность эмоции (для плавного угасания)
+
+function setEmotion(name) {
+  if (!EMOTION_TO_BLENDS[name]) name = 'neutral';
+  if (name !== currentEmotion) {
+    console.log('[emotion]', currentEmotion, '→', name);
+  }
+  currentEmotion = name;
+  emotionFadeTarget = 1.0;
+}
+
+function fadeEmotionOut() {
+  // Плавно гасим эмоцию (~1 сек) после завершения речи
+  emotionFadeTarget = 0.0;
+}
+
+// Применяем face-blendshapes текущей эмоции (выполняется в render loop ПЕРЕД lip sync)
+function updateEmotionFace() {
+  if (morphMeshes.length === 0) return;
+  const blends = EMOTION_TO_BLENDS[currentEmotion] || EMOTION_TO_BLENDS.neutral;
+  const face = blends.face;
+  // Все известные face-shapes (нужно занулять не используемые в текущей эмоции)
+  const ALL_FACE_SHAPES = [
+    'browInnerUp', 'browOuterUpLeft', 'browOuterUpRight',
+    'browDownLeft', 'browDownRight',
+    'cheekSquintLeft', 'cheekSquintRight',
+    'eyeSquintLeft', 'eyeSquintRight',
+  ];
+  for (const name of ALL_FACE_SHAPES) {
+    const target = (face[name] || 0) * emotionFadeTarget;
+    emaBlend(name, target, SMOOTHING);
+  }
+}
+
+// Mouth-shape эмоции применяется только в idle (когда не говорим).
+function applyEmotionMouthIdle() {
+  if (morphMeshes.length === 0) return;
+  const blends = EMOTION_TO_BLENDS[currentEmotion] || EMOTION_TO_BLENDS.neutral;
+  const mouth = blends.mouth || {};
+  for (const [name, val] of Object.entries(mouth)) {
+    emaBlend(name, val * emotionFadeTarget, SMOOTHING);
+  }
+}
+
+// ─── Загрузка аватара ────────────────────────────────────────────
+const loader = new GLTFLoader();
+
+function loadAvatar(url) {
+  loadingEl.classList.remove('hidden');
+  statusEl.textContent = 'loading…';
+  statusEl.className = 'warn';
+
+  loader.load(
+    url,
+    (gltf) => {
+      if (avatarRoot) {
+        scene.remove(avatarRoot);
+      }
+      avatarRoot = gltf.scene;
+      avatarRoot.position.set(0, 0, 0);
+
+      // Собираем ВСЕ mesh'и с morph targets. В RPM-аватарах blendshapes
+      // идентичны во всех skinned meshes (EyeLeft/EyeRight/Wolf3D_Head/Wolf3D_Teeth),
+      // но геометрия — разная: рот живёт на Wolf3D_Head + Wolf3D_Teeth,
+      // глаза на EyeLeft/EyeRight. Чтобы lip sync работал, надо применять
+      // morphTargetInfluences ко ВСЕМ этим meshes одновременно.
+      morphMeshes = [];
+      headMesh = null;
+      avatarRoot.traverse((obj) => {
+        if (obj.isMesh && obj.morphTargetDictionary && Object.keys(obj.morphTargetDictionary).length > 10) {
+          morphMeshes.push(obj);
+          // Предпочитаем Wolf3D_Head как primary (для UI-статуса), но dictionary
+          // одинаков во всех meshes — берём первый встретившийся.
+          if (!headMesh || obj.name === 'Wolf3D_Head') headMesh = obj;
+        }
+      });
+
+      if (morphMeshes.length > 0) {
+        morphIdx = headMesh.morphTargetDictionary;
+        const meshNames = morphMeshes.map(m => m.name).join(', ');
+        console.log('[avatar] morph meshes (' + morphMeshes.length + '):', meshNames);
+        console.log('[avatar] blendshapes per mesh:', Object.keys(morphIdx).length);
+
+        // Проверяем RPM viseme_* — если все 10 есть, переключаемся на них
+        useRpmVisemes = Object.values(VISEME_TO_RPM).every(n => morphIdx[n] !== undefined);
+        const lipSyncMode = useRpmVisemes ? 'RPM viseme_*' : 'ARKit fallback';
+        console.log('[avatar] lip sync mode:', lipSyncMode);
+        statusEl.textContent = 'ready (' + morphMeshes.length + '×' + Object.keys(morphIdx).length + ' shapes, ' + lipSyncMode + ')';
+        statusEl.className = 'ok';
+      } else {
+        console.warn('[avatar] morph targets не найдены — lip sync работать не будет');
+        statusEl.textContent = 'нет blendshapes';
+        statusEl.className = 'err';
+      }
+
+      scene.add(avatarRoot);
+      loadingEl.classList.add('hidden');
+    },
+    (progress) => {
+      const pct = progress.total > 0 ? Math.round(progress.loaded / progress.total * 100) : 0;
+      statusEl.textContent = 'loading ' + pct + '%';
+    },
+    (error) => {
+      console.error('[avatar] load failed:', error);
+      statusEl.textContent = 'load failed';
+      statusEl.className = 'err';
+      loadingEl.classList.add('hidden');
+      setupEl.style.display = 'flex';  // показываем setup screen
+      alert('Не получилось загрузить аватар.\n\n' +
+            'Возможные причины:\n' +
+            '— URL невалиден или модель удалена\n' +
+            '— upstream Ready Player Me недоступен\n\n' +
+            'Создай новый аватар на demo.readyplayer.me\n\n' +
+            'Ошибка: ' + (error.message || error));
+    }
+  );
+}
+
+// Прокси через наш бэкенд: обходит CORS + mixed content
+function toProxyUrl(rawUrl) {
+  if (!rawUrl) return '';
+  return '/api/avatar/model?url=' + encodeURIComponent(rawUrl);
+}
+
+const setupEl = document.getElementById('setup');
+const setupUrlEl = document.getElementById('setup-url');
+const setupGoBtn = document.getElementById('setup-go');
+const setupDefaultBtn = document.getElementById('setup-default');
+const setupFileEl = document.getElementById('setup-file');
+const setupFileGoBtn = document.getElementById('setup-file-go');
+
+const DEFAULT_AVATAR_URL = '/static/avatars/female_default.glb';
+
+function startWithUrl(rawUrl, options = {}) {
+  rawUrl = (rawUrl || '').trim();
+  const isLocal = rawUrl.startsWith('/') || rawUrl.startsWith('blob:');
+  if (!isLocal && !rawUrl.startsWith('http')) {
+    alert('URL должен начинаться с http(s) или быть локальным');
+    return;
+  }
+  // Сохраним только если это не blob (blob URL'ы недействительны после перезагрузки)
+  if (!rawUrl.startsWith('blob:')) {
+    try { localStorage.setItem('jarvis_avatar_url', rawUrl); } catch (e) {}
+  } else {
+    try { localStorage.removeItem('jarvis_avatar_url'); } catch (e) {}
+  }
+  avatarUrlEl.value = isLocal ? rawUrl : rawUrl;
+  setupEl.style.display = 'none';
+  // Local URLs (/static/, blob:) грузим напрямую; внешние http(s) — через proxy
+  const loadUrl = isLocal ? rawUrl : toProxyUrl(rawUrl);
+  loadAvatar(loadUrl);
+}
+
+setupDefaultBtn.onclick = () => startWithUrl(DEFAULT_AVATAR_URL);
+
+setupGoBtn.onclick = () => startWithUrl(setupUrlEl.value);
+setupUrlEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); startWithUrl(setupUrlEl.value); }
+});
+
+setupFileGoBtn.onclick = () => {
+  const f = setupFileEl.files && setupFileEl.files[0];
+  if (!f) { alert('Выбери .glb файл'); return; }
+  if (!f.name.toLowerCase().endsWith('.glb')) {
+    alert('Нужен .glb файл (binary glTF)');
+    return;
+  }
+  const blobUrl = URL.createObjectURL(f);
+  startWithUrl(blobUrl);
+};
+
+reloadBtn.onclick = () => {
+  const url = avatarUrlEl.value.trim();
+  if (!url) {
+    setupEl.style.display = 'flex';
+    return;
+  }
+  const isLocal = url.startsWith('/') || url.startsWith('blob:');
+  if (!url.startsWith('blob:')) {
+    try { localStorage.setItem('jarvis_avatar_url', url); } catch (e) {}
+  }
+  loadAvatar(isLocal ? url : toProxyUrl(url));
+};
+
+// При старте: если URL сохранён в localStorage — грузим, иначе показываем setup screen
+let savedUrl = '';
+try { savedUrl = localStorage.getItem('jarvis_avatar_url') || ''; } catch (e) {}
+if (savedUrl && !savedUrl.startsWith('blob:')) {
+  avatarUrlEl.value = savedUrl;
+  setupEl.style.display = 'none';
+  const isLocal = savedUrl.startsWith('/');
+  loadAvatar(isLocal ? savedUrl : toProxyUrl(savedUrl));
+} else {
+  // Показываем setup экран, прячем loading spinner
+  loadingEl.classList.add('hidden');
+  statusEl.textContent = 'выбери аватар';
+  statusEl.className = 'warn';
+}
+
+// ─── Idle behavior (моргание + саккады + лёгкий sway) ────────────
+let nextBlinkAt = performance.now() + 3000 + Math.random() * 3000;
+let blinkPhase = 0;  // 0 = closed, 1 = open. Animate 0→1 quickly
+let blinkActive = false;
+let blinkStartedAt = 0;
+
+function scheduleBlink() {
+  nextBlinkAt = performance.now() + 3000 + Math.random() * 3000;
+}
+
+function updateBlink(now) {
+  if (!headMesh) return;
+  if (!blinkActive && now >= nextBlinkAt) {
+    blinkActive = true;
+    blinkStartedAt = now;
+  }
+  if (blinkActive) {
+    const elapsed = (now - blinkStartedAt) / 1000;
+    const duration = 0.15;
+    // 0→1→0 за duration сек
+    let v;
+    if (elapsed < duration / 2) {
+      v = elapsed / (duration / 2);
+    } else if (elapsed < duration) {
+      v = 1 - (elapsed - duration / 2) / (duration / 2);
+    } else {
+      v = 0;
+      blinkActive = false;
+      scheduleBlink();
+    }
+    applyBlend('eyeBlinkLeft', v, /*hold*/ true);
+    applyBlend('eyeBlinkRight', v, /*hold*/ true);
+  }
+}
+
+// ─── Саккады: idle eye motion ─────────────────────────────────────
+// Модель саккад:
+//  - Каждые 1.5..4 сек выбираем новую целевую точку взгляда (eyeLookIn/Out +
+//    eyeLookUp/Down) с амплитудой ~0.25 (~12-15° от центра).
+//  - Между саккадами держим взгляд (фиксация), плюс еле заметный микро-дрейф.
+//  - Сам прыжок (jerk) — быстрый: 60-100 мс, плавная ease-in-out интерполяция.
+//  - При большой амплитуде ±70% повторяем чаще (как настоящие глаза при поиске).
+let gazeCurrent = { h: 0, v: 0 };   // h: + = look right (от глазного яблока), v: + = down
+let gazeTarget  = { h: 0, v: 0 };
+let saccadeStart = 0;
+let saccadeFrom  = { h: 0, v: 0 };
+let saccadeDurationMs = 80;
+let nextSaccadeAt = performance.now() + 1500;
+let saccadeActive = false;
+
+function scheduleNextSaccade(now) {
+  // Распределение: 60% маленькие (0.1..0.2), 30% средние (0.2..0.4), 10% больших (0.4..0.6)
+  const r = Math.random();
+  let amp;
+  if (r < 0.6) amp = 0.10 + Math.random() * 0.10;
+  else if (r < 0.9) amp = 0.20 + Math.random() * 0.20;
+  else amp = 0.40 + Math.random() * 0.20;
+  const angle = Math.random() * Math.PI * 2;
+  gazeTarget = {
+    h: Math.cos(angle) * amp,
+    v: Math.sin(angle) * amp * 0.7,  // вертикальная амплитуда меньше — реалистично
+  };
+  saccadeFrom = { ...gazeCurrent };
+  saccadeStart = now;
+  saccadeDurationMs = 60 + Math.random() * 40;  // 60-100 мс
+  saccadeActive = true;
+  // Время до СЛЕДУЮЩЕЙ саккады — пауза-фиксация после этой
+  nextSaccadeAt = now + saccadeDurationMs + 1200 + Math.random() * 2500;  // 1.5-4 сек
+}
+
+function easeInOutQuad(t) { return t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t+2, 2)/2; }
+
+function updateSaccades(now) {
+  if (!headMesh) return;
+  // Если время следующей саккады — стартуем
+  if (!saccadeActive && now >= nextSaccadeAt) {
+    scheduleNextSaccade(now);
+  }
+  if (saccadeActive) {
+    const elapsed = now - saccadeStart;
+    if (elapsed >= saccadeDurationMs) {
+      gazeCurrent = { ...gazeTarget };
+      saccadeActive = false;
+    } else {
+      const t = easeInOutQuad(elapsed / saccadeDurationMs);
+      gazeCurrent.h = saccadeFrom.h + (gazeTarget.h - saccadeFrom.h) * t;
+      gazeCurrent.v = saccadeFrom.v + (gazeTarget.v - saccadeFrom.v) * t;
+    }
+  } else {
+    // Микро-дрейф во время фиксации — крошечный шум ±0.005
+    gazeCurrent.h += (Math.random() - 0.5) * 0.002;
+    gazeCurrent.v += (Math.random() - 0.5) * 0.002;
+    // Возврат к target очень медленно (engagement к центру взгляда)
+    gazeCurrent.h += (gazeTarget.h - gazeCurrent.h) * 0.01;
+    gazeCurrent.v += (gazeTarget.v - gazeCurrent.v) * 0.01;
+  }
+
+  // Применяем к ARKit eye-look blendshapes
+  // ARKit naming: eyeLookIn{Left,Right} — внутрь к носу, eyeLookOut{L,R} — наружу к виску.
+  // h > 0 = look right в координатах зрителя:
+  //   правый глаз смотрит наружу (out), левый глаз смотрит внутрь (in)
+  // h < 0 = look left:
+  //   правый глаз — in, левый глаз — out
+  const h = gazeCurrent.h;
+  const v = gazeCurrent.v;
+  const lookRight = Math.max(0,  h);
+  const lookLeft  = Math.max(0, -h);
+  const lookDown  = Math.max(0,  v);
+  const lookUp    = Math.max(0, -v);
+  // hold=false — eye-look blendshapes никто другой не трогает, прямая запись
+  applyBlend('eyeLookOutRight', lookRight);
+  applyBlend('eyeLookInLeft',   lookRight);
+  applyBlend('eyeLookOutLeft',  lookLeft);
+  applyBlend('eyeLookInRight',  lookLeft);
+  applyBlend('eyeLookDownLeft',  lookDown);
+  applyBlend('eyeLookDownRight', lookDown);
+  applyBlend('eyeLookUpLeft',    lookUp);
+  applyBlend('eyeLookUpRight',   lookUp);
+}
+
+// ─── Lip-sync: применяем visemes по времени ──────────────────────
+function findActiveViseme(tSec) {
+  // Линейный поиск (timelines обычно < 200 точек) — O(n), хватит
+  if (!visemeTimeline.length) return null;
+  let active = visemeTimeline[0];
+  for (const v of visemeTimeline) {
+    if (v.t <= tSec) active = v;
+    else break;
+  }
+  return active;
+}
+
+// Применить blendshape ко ВСЕМ morph-мешам аватара одновременно.
+// RPM-аватар разделяет blendshapes между EyeLeft/EyeRight/Wolf3D_Head/Wolf3D_Teeth —
+// каждый mesh имеет свой morphTargetInfluences и анимируется отдельно.
+function applyBlend(name, value, hold = false) {
+  if (morphIdx[name] === undefined || morphMeshes.length === 0) return;
+  const idx = morphIdx[name];
+  if (hold) {
+    for (const m of morphMeshes) {
+      m.morphTargetInfluences[idx] = Math.max(m.morphTargetInfluences[idx], value);
+    }
+  } else {
+    for (const m of morphMeshes) {
+      m.morphTargetInfluences[idx] = value;
+    }
+  }
+}
+
+// Прочитать текущее значение influence (для EMA-сглаживания). Берём из primary mesh.
+function readMorph(name) {
+  if (morphIdx[name] === undefined || !headMesh) return 0;
+  return headMesh.morphTargetInfluences[morphIdx[name]] || 0;
+}
+
+// EMA-сглаживание ко всем meshes: current * s + target * (1-s)
+function emaBlend(name, target, smoothing) {
+  if (morphIdx[name] === undefined || morphMeshes.length === 0) return;
+  const idx = morphIdx[name];
+  const current = morphMeshes[0].morphTargetInfluences[idx] || 0;
+  const newVal = current * smoothing + target * (1 - smoothing);
+  for (const m of morphMeshes) {
+    m.morphTargetInfluences[idx] = newVal;
+  }
+}
+
+// Умножить influence на коэффициент (для плавного затухания) — во всех meshes
+function decayMorph(name, factor) {
+  if (morphIdx[name] === undefined || morphMeshes.length === 0) return;
+  const idx = morphIdx[name];
+  for (const m of morphMeshes) {
+    m.morphTargetInfluences[idx] = (m.morphTargetInfluences[idx] || 0) * factor;
+  }
+}
+
+function resetMouthBlends() {
+  if (morphMeshes.length === 0) return;
+  const mouthShapes = [
+    'jawOpen', 'mouthClose', 'mouthFunnel', 'mouthPucker',
+    'mouthStretchLeft', 'mouthStretchRight',
+    'mouthSmileLeft', 'mouthSmileRight',
+    'mouthPressLeft', 'mouthPressRight',
+    'mouthRollLower', 'mouthShrugLower',
+    'mouthLowerDownLeft', 'mouthLowerDownRight',
+    // RPM viseme shapes тоже надо гасить когда не говорим
+    'viseme_sil', 'viseme_PP', 'viseme_FF', 'viseme_TH', 'viseme_DD',
+    'viseme_kk', 'viseme_CH', 'viseme_SS', 'viseme_nn', 'viseme_RR',
+    'viseme_aa', 'viseme_E', 'viseme_I', 'viseme_O', 'viseme_U',
+  ];
+  for (const k of mouthShapes) {
+    decayMorph(k, 1 - SMOOTHING);  // плавно к 0, во всех meshes
+  }
+}
+
+function updateLipSync() {
+  if (morphMeshes.length === 0 || !audioEl || audioEl.paused) {
+    // Плавно гасим рот когда не говорим — потом накладываем mouth-эмоцию (улыбка/нахмуренность)
+    resetMouthBlends();
+    applyEmotionMouthIdle();
+    return;
+  }
+  const tSec = audioEl.currentTime;
+  const active = findActiveViseme(tSec);
+  if (!active) return;
+
+  // Считаем амплитуду живого аудио — для модуляции jawOpen
+  let amp = 0.5;
+  if (analyser && analyserData) {
+    analyser.getByteTimeDomainData(analyserData);
+    let sumSq = 0;
+    for (let i = 0; i < analyserData.length; i++) {
+      const v = (analyserData[i] - 128) / 128;
+      sumSq += v * v;
+    }
+    const rms = Math.sqrt(sumSq / analyserData.length);
+    amp = Math.min(1.0, rms * 4.0);  // нормировка
+  }
+
+  // Сначала reset предыдущих
+  resetMouthBlends();
+
+  const targetWeight = active.weight * (0.6 + 0.4 * amp);  // модуляция амплитудой
+
+  if (useRpmVisemes) {
+    // RPM-режим: применяем единственный viseme_* shape — RPM сам открыл рот правильно
+    const rpmName = VISEME_TO_RPM[active.viseme] || 'viseme_sil';
+    emaBlend(rpmName, targetWeight, SMOOTHING);
+  } else {
+    // ARKit fallback: комбинируем mouth-shapes
+    const blends = VISEME_TO_BLENDS[active.viseme] || VISEME_TO_BLENDS.sil;
+    for (const [shape, baseVal] of Object.entries(blends)) {
+      emaBlend(shape, baseVal * targetWeight, SMOOTHING);
+    }
+  }
+}
+
+// ─── Idle micro-motion головы ────────────────────────────────────
+let swayTime = 0;
+function updateHeadSway(deltaSec) {
+  if (!avatarRoot) return;
+  swayTime += deltaSec;
+  const yaw = Math.sin(swayTime * 0.4) * 0.025;     // ±1.4°
+  const pitch = Math.sin(swayTime * 0.27) * 0.018;  // ±1°
+  avatarRoot.rotation.y = yaw;
+  avatarRoot.rotation.x = pitch;
+}
+
+// ─── Render loop ─────────────────────────────────────────────────
+let lastFrameTime = performance.now();
+function animate() {
+  const now = performance.now();
+  const dt = (now - lastFrameTime) / 1000;
+  lastFrameTime = now;
+
+  updateBlink(now);
+  updateSaccades(now);   // idle eye movement — микро-саккады + фиксации
+  updateEmotionFace();   // brow/cheek — постоянно во время реплики
+  updateLipSync();       // mouth-shapes (visemes если говорит, иначе emotion idle)
+  updateHeadSway(dt);
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+animate();
+
+// ─── Speak action ────────────────────────────────────────────────
+let emotionHoldTimer = null;
+
+async function speak(text, opts = {}) {
+  if (!text.trim()) return;
+  speakBtn.disabled = true;
+  statusEl.textContent = 'TTS…';
+  statusEl.className = 'warn';
+
+  try {
+    const r = await fetch('/api/avatar/speak', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      // emotion=auto — сервер сам детектит по тексту
+      body: JSON.stringify({ text, emotion: opts.emotion || 'auto' }),
+    });
+    if (!r.ok) {
+      const msg = await r.text();
+      throw new Error('TTS failed: ' + msg);
+    }
+    const data = await r.json();
+    console.log('[speak] got', data.duration_ms, 'ms,', data.visemes.length, 'visemes, emotion=', data.emotion);
+
+    visemeTimeline = data.visemes;
+    speakDurationSec = data.duration_ms / 1000;
+
+    // Применяем эмоцию из response — лицо реагирует пока говорит
+    if (emotionHoldTimer) { clearTimeout(emotionHoldTimer); emotionHoldTimer = null; }
+    setEmotion(data.emotion || 'neutral');
+
+    // Подготовка аудио + analyser для амплитуды
+    stopAudio();
+    audioEl = new Audio(data.audio_url);
+    audioEl.crossOrigin = 'anonymous';
+
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    const source = audioCtx.createMediaElementSource(audioEl);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    analyserData = new Uint8Array(analyser.fftSize);
+    source.connect(analyser);
+    analyser.connect(audioCtx.destination);
+
+    // Glitch burst при старте
+    glitchEl.classList.add('fire');
+    setTimeout(() => glitchEl.classList.remove('fire'), 350);
+
+    await audioEl.play();
+    statusEl.textContent = 'speaking… (' + (data.emotion || 'neutral') + ')';
+    statusEl.className = 'ok';
+
+    audioEl.onended = () => {
+      visemeTimeline = [];
+      statusEl.textContent = 'ready';
+      speakBtn.disabled = false;
+      glitchEl.classList.add('fire');
+      setTimeout(() => glitchEl.classList.remove('fire'), 300);
+      // Держим эмоцию ещё 4 сек, потом плавно гасим к neutral
+      if (emotionHoldTimer) clearTimeout(emotionHoldTimer);
+      emotionHoldTimer = setTimeout(() => {
+        fadeEmotionOut();
+        // Через ещё 1 сек сбрасываем имя эмоции (visуально уже погасла)
+        setTimeout(() => { if (emotionFadeTarget < 0.05) setEmotion('neutral'); }, 1200);
+      }, 4000);
+    };
+  } catch (e) {
+    console.error('[speak] error:', e);
+    statusEl.textContent = 'error';
+    statusEl.className = 'err';
+    speakBtn.disabled = false;
+    alert('Ошибка: ' + e.message);
+  }
+}
+
+function stopAudio() {
+  if (audioEl) {
+    audioEl.pause();
+    audioEl.src = '';
+    audioEl = null;
+  }
+  visemeTimeline = [];
+}
+
+speakBtn.onclick = () => speak(textInput.value);
+stopBtn.onclick = () => {
+  stopAudio();
+  statusEl.textContent = 'stopped';
+  speakBtn.disabled = false;
+};
+textInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); speak(textInput.value); }
+});
+
+// ─── Auto-speak: WebSocket subscription on /ws ───────────────────
+// Слушаем ASSISTANT_REPLY события из EventBus и автоматически
+// озвучиваем их через тот же /api/avatar/speak path.
+const autoToggle = document.getElementById('auto-toggle');
+const autoScope = document.getElementById('auto-scope');
+const wsStateEl = document.getElementById('ws-state');
+
+// Восстанавливаем сохранённые настройки
+try {
+  const savedAuto = localStorage.getItem('jarvis_avatar_auto');
+  if (savedAuto !== null) autoToggle.checked = savedAuto === '1';
+  const savedScope = localStorage.getItem('jarvis_avatar_scope');
+  if (savedScope) autoScope.value = savedScope;
+} catch (e) {}
+autoToggle.addEventListener('change', () => {
+  try { localStorage.setItem('jarvis_avatar_auto', autoToggle.checked ? '1' : '0'); } catch (e) {}
+});
+autoScope.addEventListener('change', () => {
+  try { localStorage.setItem('jarvis_avatar_scope', autoScope.value); } catch (e) {}
+});
+
+let ws = null;
+let wsReconnectAt = 0;
+
+function setWsState(text, cls) {
+  wsStateEl.textContent = text;
+  wsStateEl.className = cls;
+}
+
+function shouldAutoSpeak(event) {
+  if (!autoToggle.checked) return false;
+  if (event.type !== 'assistant_reply') return false;
+  const text = event.data && event.data.text;
+  if (!text || !text.trim()) return false;
+  // Фильтр по каналу
+  const scope = autoScope.value;
+  if (scope === 'web_hud' && event.channel !== 'web_hud') return false;
+  // Не озвучиваем voice-канал даже при "all" — там свой TTS играется локально,
+  // получится двойной голос. Telegram озвучивать можно (текст без локального TTS).
+  if (scope === 'all' && event.channel === 'local_voice') return false;
+  return true;
+}
+
+function connectWs() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const url = proto + '//' + location.host + '/ws';
+  try {
+    ws = new WebSocket(url);
+  } catch (e) {
+    console.error('[ws] construct failed:', e);
+    scheduleReconnect();
+    return;
+  }
+  setWsState('connecting…', 'warn');
+
+  ws.onopen = () => {
+    setWsState('connected', 'ok');
+    console.log('[ws] open');
+  };
+
+  ws.onmessage = (msg) => {
+    let payload;
+    try { payload = JSON.parse(msg.data); } catch (e) { return; }
+    // Сервер шлёт {event: {...}} для каждого bus event и {snapshot: {...}} при connect
+    const event = payload.event;
+    if (!event) return;
+    if (!shouldAutoSpeak(event)) return;
+
+    const text = event.data.text;
+    console.log('[ws] auto-speak (' + event.channel + '):', text.slice(0, 60));
+    // Barge-in: если уже играем — прерываем и стартуем новый.
+    // stopAudio() занулит visemeTimeline, speak() заменит.
+    if (audioEl && !audioEl.paused) {
+      stopAudio();
+    }
+    // Не блокируем UI button — auto-speak не должен дизейблить ручной ввод
+    speak(text).catch(err => console.error('[auto-speak] failed:', err));
+  };
+
+  ws.onerror = (e) => {
+    console.warn('[ws] error:', e);
+  };
+
+  ws.onclose = () => {
+    setWsState('disconnected', 'err');
+    console.log('[ws] closed, reconnect in 3s');
+    scheduleReconnect();
+  };
+}
+
+function scheduleReconnect() {
+  const now = performance.now();
+  if (now - wsReconnectAt < 2000) return;  // дебаунс
+  wsReconnectAt = now;
+  setTimeout(connectWs, 3000);
+}
+
+connectWs();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>J.A.R.V.I.S.</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #08090c;
+    --bg-2: #11141b;
+    --line: #1f2530;
+    --txt: #e6e9ef;
+    --muted: #8a93a6;
+    --jarvis: #6ea8ff;       /* iron-man circuit blue */
+    --user: #ffd166;
+    --ok: #5ee0a2;
+    --warn: #ffb86b;
+    --err: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--txt);
+    font-family: -apple-system, "SF Pro", "Segoe UI", Roboto, system-ui, sans-serif; }
+  body { display: grid; grid-template-columns: 280px 1fr; grid-template-rows: 56px 1fr 60px; height: 100vh; }
+
+  header { grid-column: 1 / 3; display: flex; align-items: center; padding: 0 20px;
+    border-bottom: 1px solid var(--line); background: var(--bg-2); }
+  header h1 { font-size: 16px; margin: 0; letter-spacing: 0.12em; color: var(--jarvis); }
+  header .right { margin-left: auto; display: flex; gap: 14px; font-size: 13px; color: var(--muted); }
+  header .right span b { color: var(--txt); font-weight: 500; }
+
+  aside { padding: 20px; border-right: 1px solid var(--line); overflow-y: auto; }
+  .arc-reactor { display: flex; justify-content: center; padding: 20px 0; }
+  .arc-reactor svg { width: 160px; height: 160px; }
+  .arc-core { fill: var(--jarvis); animation: pulse 2s ease-in-out infinite; }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+  }
+  .status-table { width: 100%; font-size: 12px; margin-top: 12px; }
+  .status-table td { padding: 5px 0; border-bottom: 1px solid var(--line); }
+  .status-table td:first-child { color: var(--muted); }
+  .status-table td:last-child { text-align: right; color: var(--txt); }
+
+  main { padding: 0; overflow-y: auto; background: var(--bg); }
+  #log { padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+  .msg { padding: 10px 14px; border-radius: 8px; max-width: 80%; line-height: 1.45;
+    word-wrap: break-word; white-space: pre-wrap; }
+  .msg.user { align-self: flex-end; background: rgba(255, 209, 102, 0.12); color: var(--txt); border: 1px solid rgba(255, 209, 102, 0.3); }
+  .msg.assistant { align-self: flex-start; background: rgba(110, 168, 255, 0.1); color: var(--txt); border: 1px solid rgba(110, 168, 255, 0.3); }
+  .msg .who { font-size: 11px; color: var(--muted); margin-bottom: 4px; letter-spacing: 0.05em; }
+  .msg.user .who { color: var(--user); text-align: right; }
+  .msg.assistant .who { color: var(--jarvis); }
+  .event-log { font-size: 11px; color: var(--muted); padding: 4px 14px; align-self: stretch; opacity: 0.6;
+    font-family: "JetBrains Mono", "Cascadia Mono", monospace; }
+  .event-log .channel { color: var(--ok); }
+  .event-log .type { color: var(--jarvis); }
+
+  footer { grid-column: 2 / 3; display: flex; padding: 12px 20px; gap: 10px;
+    border-top: 1px solid var(--line); background: var(--bg-2); }
+  #input { flex: 1; background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+    color: var(--txt); padding: 10px 14px; font-size: 14px; outline: none;
+    font-family: inherit; }
+  #input:focus { border-color: var(--jarvis); }
+  #send { padding: 0 22px; background: var(--jarvis); color: #08090c; border: 0; border-radius: 6px;
+    font-weight: 600; cursor: pointer; }
+  #send:hover { filter: brightness(1.1); }
+  #send:disabled { background: var(--line); color: var(--muted); cursor: not-allowed; }
+
+  .status-led { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .led-ok { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+  .led-warn { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
+  .led-err { background: var(--err); box-shadow: 0 0 8px var(--err); }
+
+  /* === Tabs (C14) === */
+  .tabs { display: flex; gap: 2px; margin-left: 24px; }
+  .tab { background: transparent; color: var(--muted); border: 0; padding: 8px 14px;
+    font-size: 13px; cursor: pointer; border-radius: 6px 6px 0 0; border-bottom: 2px solid transparent; }
+  .tab:hover { color: var(--txt); }
+  .tab.active { color: var(--jarvis); border-bottom-color: var(--jarvis); }
+
+  /* === Logs panel === */
+  .panel { display: none; height: 100%; flex-direction: column; }
+  .panel.active { display: flex; }
+  #chat-panel.panel { display: flex; }
+  #chat-panel.panel:not(.active) { display: none; }
+
+  .logs-toolbar { display: flex; gap: 8px; padding: 10px 16px; align-items: center;
+    border-bottom: 1px solid var(--line); background: var(--bg-2); flex-wrap: wrap; }
+  .logs-toolbar select, .logs-toolbar input[type="text"] {
+    background: var(--bg); border: 1px solid var(--line); color: var(--txt);
+    padding: 5px 10px; font-size: 12px; border-radius: 4px; outline: none;
+    font-family: inherit; }
+  .logs-toolbar select:focus, .logs-toolbar input[type="text"]:focus { border-color: var(--jarvis); }
+  .logs-toolbar input[type="text"] { width: 220px; }
+  .logs-toolbar button { background: var(--line); color: var(--txt); border: 0;
+    padding: 5px 12px; cursor: pointer; font-size: 12px; border-radius: 4px;
+    font-family: inherit; }
+  .logs-toolbar button:hover { background: #2a3140; }
+  .logs-toolbar button.active { background: var(--jarvis); color: var(--bg); }
+  .logs-toolbar .spacer { flex: 1; }
+  .logs-toolbar .meta { font-size: 11px; color: var(--muted); font-family: "JetBrains Mono", "Cascadia Mono", monospace; }
+  .logs-toolbar .meta b { color: var(--txt); font-weight: 500; }
+
+  #logs-view { flex: 1; overflow-y: auto; padding: 8px 0;
+    font-family: "JetBrains Mono", "Cascadia Mono", "Consolas", monospace;
+    font-size: 12px; line-height: 1.5; background: var(--bg); }
+  .log-line { white-space: pre-wrap; word-break: break-word; padding: 1px 16px;
+    border-left: 3px solid transparent; }
+  .log-line:hover { background: rgba(255,255,255,0.02); }
+  .log-line.lvl-error { color: var(--err); border-left-color: var(--err); background: rgba(255, 107, 107, 0.05); }
+  .log-line.lvl-warn { color: var(--warn); border-left-color: var(--warn); }
+  .log-line.lvl-info { color: var(--txt); }
+  .log-line.lvl-ok { color: var(--ok); border-left-color: var(--ok); }
+  .log-line.lvl-debug { color: var(--muted); }
+  .log-line.match-highlight { background: rgba(110, 168, 255, 0.12); }
+  .log-empty { padding: 40px 20px; text-align: center; color: var(--muted); font-style: italic; }
+
+  /* === Metrics panel (C15) === */
+  .metrics-toolbar { display: flex; gap: 10px; padding: 10px 16px; align-items: center;
+    border-bottom: 1px solid var(--line); background: var(--bg-2); flex-wrap: wrap; }
+  .metrics-toolbar label { font-size: 12px; color: var(--muted); }
+  .metrics-toolbar select { background: var(--bg); border: 1px solid var(--line); color: var(--txt);
+    padding: 5px 10px; font-size: 12px; border-radius: 4px; outline: none; font-family: inherit; }
+  .metrics-toolbar button { background: var(--line); color: var(--txt); border: 0;
+    padding: 5px 12px; cursor: pointer; font-size: 12px; border-radius: 4px; font-family: inherit; }
+  .metrics-toolbar button:hover { background: #2a3140; }
+  .metrics-toolbar .meta { margin-left: auto; font-size: 11px; color: var(--muted); font-family: "JetBrains Mono", monospace; }
+  #metrics-content { flex: 1; overflow-y: auto; padding: 16px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .card { background: var(--bg-2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; }
+  .card .card-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+  .card .card-value { font-size: 26px; color: var(--jarvis); font-weight: 600; line-height: 1.1; }
+  .card .card-sub { font-size: 11px; color: var(--muted); margin-top: 4px; font-family: "JetBrains Mono", monospace; }
+  .card.warn .card-value { color: var(--warn); }
+  .card.err .card-value { color: var(--err); }
+  .card.ok .card-value { color: var(--ok); }
+
+  .metrics-section-title { font-size: 12px; color: var(--muted); text-transform: uppercase;
+    letter-spacing: 0.08em; margin: 24px 0 10px 0; }
+  .chart-wrap { background: var(--bg-2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px; margin-bottom: 16px; }
+  .chart-wrap h3 { margin: 0 0 10px 0; font-size: 13px; color: var(--txt); font-weight: 500; }
+  .chart-canvas { width: 100% !important; height: 200px !important; max-height: 240px; }
+
+  .providers-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+  .provider-block { background: var(--bg-2); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; }
+  .provider-block h4 { margin: 0 0 8px 0; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .provider-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; }
+  .provider-row .name { color: var(--txt); font-family: "JetBrains Mono", monospace; font-size: 12px; }
+  .provider-row .count { color: var(--jarvis); font-weight: 500; }
+  .provider-row .bar { display: inline-block; height: 4px; background: var(--jarvis); border-radius: 2px; margin-right: 8px; vertical-align: middle; }
+
+  .events-table { width: 100%; border-collapse: collapse; font-size: 12px;
+    font-family: "JetBrains Mono", monospace; }
+  .events-table th { text-align: left; padding: 6px 10px; color: var(--muted); font-weight: 500;
+    border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg-2); }
+  .events-table td { padding: 4px 10px; border-bottom: 1px solid #161a22; }
+  .events-table tr:hover td { background: rgba(255,255,255,0.02); }
+  .events-table .et-stt { color: #7fc7ff; }
+  .events-table .et-llm { color: #c89bff; }
+  .events-table .et-tts { color: #ffd166; }
+  .events-table .et-e2e { color: var(--ok); }
+  .events-table .et-fallback { color: var(--warn); }
+  .events-table .et-error { color: var(--err); }
+  .events-table .et-barge_in { color: #ff8ec7; }
+  .events-table .et-speaker_reject { color: var(--muted); }
+  .events-table .et-wake { color: #5ee0e0; }
+
+  /* Goals tab */
+  .goals-toolbar { display: flex; align-items: center; gap: 12px; padding: 10px 0 16px; flex-wrap: wrap; }
+  .goals-toolbar label { font-size: 12px; color: var(--muted); }
+  .goals-toolbar button { background: var(--bg-2); color: var(--txt); border: 1px solid var(--line);
+    padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+  .goals-toolbar button:hover { border-color: var(--jarvis); color: var(--jarvis); }
+  .goals-toolbar .meta { color: var(--muted); font-size: 11px; margin-left: auto; }
+  .goal-card { background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px;
+    padding: 14px 16px; margin-bottom: 10px; }
+  .goal-card.completed { opacity: 0.55; }
+  .goal-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+  .goal-name { font-size: 14px; color: var(--txt); font-weight: 500; }
+  .goal-name .gid { color: var(--muted); font-size: 11px; margin-right: 6px; font-family: 'JetBrains Mono', monospace; }
+  .goal-numbers { font-size: 12px; color: var(--muted); font-family: 'JetBrains Mono', monospace; white-space: nowrap; }
+  .goal-numbers b { color: var(--txt); }
+  .goal-bar-wrap { background: rgba(255,255,255,0.05); border-radius: 4px; height: 8px; overflow: hidden;
+    position: relative; }
+  .goal-bar-fill { height: 100%; background: linear-gradient(90deg, var(--jarvis) 0%, #5ee0e0 100%);
+    border-radius: 4px; transition: width 0.4s ease; }
+  .goal-bar-fill.over { background: linear-gradient(90deg, var(--ok) 0%, #88f0a0 100%); }
+  .goal-bar-fill.behind { background: linear-gradient(90deg, var(--warn) 0%, #ffd166 100%); }
+  .goal-meta { display: flex; justify-content: space-between; align-items: center; margin-top: 8px;
+    font-size: 11px; color: var(--muted); }
+  .goal-pace { font-family: 'JetBrains Mono', monospace; }
+  .goal-pace.over { color: var(--ok); }
+  .goal-pace.behind { color: var(--warn); }
+  .goals-empty { text-align: center; color: var(--muted); padding: 60px 20px; font-size: 13px; }
+  .goals-empty .hint { display: block; margin-top: 10px; font-size: 11px; opacity: 0.7; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🔵 J.A.R.V.I.S. — HUD</h1>
+  <nav class="tabs">
+    <button class="tab active" data-tab="chat">Chat</button>
+    <button class="tab" data-tab="logs">Logs</button>
+    <button class="tab" data-tab="metrics">Metrics</button>
+    <button class="tab" data-tab="goals">Цели</button>
+    <a class="tab" href="/avatar" target="_blank" title="Открыть 3D-аватар в отдельной вкладке" style="text-decoration:none;display:inline-block">Avatar ↗</a>
+  </nav>
+  <div class="right">
+    <span><span id="led" class="status-led led-warn"></span><b id="ws-status">connecting…</b></span>
+    <span>owner: <b id="owner">—</b></span>
+    <span>messages: <b id="msg-count">0</b></span>
+  </div>
+</header>
+
+<aside>
+  <div class="arc-reactor">
+    <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="100" cy="100" r="90" fill="none" stroke="var(--jarvis)" stroke-width="1.5" opacity="0.3"/>
+      <circle cx="100" cy="100" r="72" fill="none" stroke="var(--jarvis)" stroke-width="1.5" opacity="0.5"/>
+      <circle cx="100" cy="100" r="56" fill="none" stroke="var(--jarvis)" stroke-width="2" opacity="0.7"/>
+      <circle cx="100" cy="100" r="38" fill="none" stroke="var(--jarvis)" stroke-width="1"/>
+      <circle class="arc-core" cx="100" cy="100" r="22"/>
+      <g stroke="var(--jarvis)" stroke-width="1.2" opacity="0.7">
+        <line x1="100" y1="10" x2="100" y2="28"/>
+        <line x1="100" y1="172" x2="100" y2="190"/>
+        <line x1="10" y1="100" x2="28" y2="100"/>
+        <line x1="172" y1="100" x2="190" y2="100"/>
+        <line x1="36" y1="36" x2="48" y2="48"/>
+        <line x1="152" y1="152" x2="164" y2="164"/>
+        <line x1="36" y1="164" x2="48" y2="152"/>
+        <line x1="152" y1="48" x2="164" y2="36"/>
+      </g>
+    </svg>
+  </div>
+  <table class="status-table">
+    <tr><td>channel</td><td>web_hud</td></tr>
+    <tr><td>brain</td><td>claude-sonnet-4.6</td></tr>
+    <tr><td>memory</td><td><span id="mem-loaded">…</span></td></tr>
+    <tr><td>network</td><td><span id="net-state-led" class="status-led led-warn"></span><span id="net-state">…</span></td></tr>
+    <tr><td>providers</td><td><span id="provider-list" style="font-size:11px;font-family:'JetBrains Mono',monospace">…</span></td></tr>
+    <tr><td>last event</td><td><span id="last-event">—</span></td></tr>
+  </table>
+</aside>
+
+<main>
+  <div id="chat-panel" class="panel active">
+    <div id="log"></div>
+  </div>
+  <div id="logs-panel" class="panel">
+    <div class="logs-toolbar">
+      <label style="font-size:12px;color:var(--muted)">источник:</label>
+      <select id="log-source"></select>
+      <input id="log-filter" type="text" placeholder="фильтр (regex или подстрока)…" autocomplete="off"/>
+      <button id="log-pause" title="пауза auto-scroll">⏸ pause</button>
+      <button id="log-clear" title="очистить view (не файл)">clear</button>
+      <button id="log-wrap" class="active" title="перенос строк">wrap</button>
+      <div class="spacer"></div>
+      <span class="meta">размер: <b id="log-size">—</b> · строк: <b id="log-count">0</b> · <b id="log-status">offline</b></span>
+    </div>
+    <div id="logs-view"></div>
+  </div>
+  <div id="metrics-panel" class="panel">
+    <div class="metrics-toolbar">
+      <label>окно:</label>
+      <select id="metrics-window">
+        <option value="1h">1 час</option>
+        <option value="6h">6 часов</option>
+        <option value="24h" selected>24 часа</option>
+        <option value="7d">7 дней</option>
+        <option value="30d">30 дней</option>
+      </select>
+      <button id="metrics-refresh">↻ refresh</button>
+      <label style="margin-left:14px"><input type="checkbox" id="metrics-autorefresh" checked/> auto-refresh 10s</label>
+      <span class="meta">обновлено: <b id="metrics-updated">—</b></span>
+    </div>
+    <div id="metrics-content">
+      <div id="metrics-empty" style="text-align:center;color:var(--muted);padding:40px;">загрузка…</div>
+      <div id="metrics-body" style="display:none">
+        <div class="cards" id="metrics-cards"></div>
+        <div class="metrics-section-title">Latency (avg / p50 / p95 / max)</div>
+        <div class="chart-wrap"><h3>End-to-End</h3><canvas class="chart-canvas" id="chart-e2e"></canvas></div>
+        <div class="providers-row">
+          <div class="chart-wrap"><h3>STT latency</h3><canvas class="chart-canvas" id="chart-stt"></canvas></div>
+          <div class="chart-wrap"><h3>LLM latency</h3><canvas class="chart-canvas" id="chart-llm"></canvas></div>
+        </div>
+        <div class="metrics-section-title">Provider hit-rate</div>
+        <div class="providers-row" id="metrics-providers"></div>
+        <div class="metrics-section-title">Последние события</div>
+        <div style="background:var(--bg-2);border:1px solid var(--line);border-radius:8px;overflow:hidden;max-height:400px;overflow-y:auto;">
+          <table class="events-table">
+            <thead><tr><th>время</th><th>тип</th><th>канал</th><th>provider</th><th>latency</th><th>ok</th></tr></thead>
+            <tbody id="metrics-events-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="goals-panel" class="panel">
+    <div class="goals-toolbar">
+      <button id="goals-refresh" title="перезагрузить из workspace/goals.json">↻ refresh</button>
+      <label><input type="checkbox" id="goals-show-done"/> показать завершённые</label>
+      <label style="margin-left:auto"><input type="checkbox" id="goals-autorefresh" checked/> auto-refresh 15s</label>
+      <span class="meta">обновлено: <b id="goals-updated">—</b></span>
+    </div>
+    <div id="goals-content">
+      <div id="goals-empty" class="goals-empty">
+        загрузка…
+      </div>
+      <div id="goals-list" style="display:none"></div>
+    </div>
+  </div>
+</main>
+
+<footer id="chat-footer">
+  <input id="input" type="text" placeholder="Скажи Джарвису что-нибудь…" autofocus autocomplete="off"/>
+  <button id="send">Отправить</button>
+</footer>
+
+<script>
+  const log = document.getElementById('log');
+  const input = document.getElementById('input');
+  const send = document.getElementById('send');
+  const wsStatus = document.getElementById('ws-status');
+  const led = document.getElementById('led');
+  const msgCount = document.getElementById('msg-count');
+  const memLoaded = document.getElementById('mem-loaded');
+  const lastEvent = document.getElementById('last-event');
+
+  let ws = null;
+  let counter = 0;
+  let pending = false;
+
+  function setStatus(text, klass) {
+    wsStatus.textContent = text;
+    led.className = 'status-led ' + klass;
+  }
+
+  function addMessage(role, text) {
+    const div = document.createElement('div');
+    div.className = 'msg ' + role;
+    const who = role === 'user' ? 'Босс' : 'Джарвис';
+    let body;
+    if (role === 'assistant' && typeof marked !== 'undefined') {
+      // Markdown для реплик Джарвиса
+      try {
+        marked.setOptions({ breaks: true, gfm: true });
+        body = '<div class="md">' + marked.parse(String(text)) + '</div>';
+      } catch (e) {
+        body = escapeHtml(text);
+      }
+    } else {
+      body = escapeHtml(text);
+    }
+    div.innerHTML = '<div class="who">' + who + '</div>' + body;
+    log.appendChild(div);
+    log.parentElement.scrollTop = log.parentElement.scrollHeight;
+    counter++;
+    msgCount.textContent = counter;
+  }
+
+  function addEvent(ev) {
+    const div = document.createElement('div');
+    div.className = 'event-log';
+    const ch = ev.channel ? '<span class="channel">[' + ev.channel + ']</span> ' : '';
+    div.innerHTML = ch + '<span class="type">' + ev.type + '</span>: ' +
+      JSON.stringify(ev.data).substring(0, 120);
+    log.appendChild(div);
+    log.parentElement.scrollTop = log.parentElement.scrollHeight;
+    lastEvent.textContent = ev.type;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function connect() {
+    setStatus('connecting…', 'led-warn');
+    ws = new WebSocket('ws://' + location.host + '/ws');
+    ws.onopen = () => setStatus('online', 'led-ok');
+    ws.onclose = () => {
+      setStatus('offline — reconnecting', 'led-err');
+      setTimeout(connect, 1500);
+    };
+    ws.onerror = () => setStatus('error', 'led-err');
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      // Snapshot истории при подключении
+      if (msg.snapshot) {
+        memLoaded.textContent = msg.snapshot.history.length + ' msg';
+        for (const m of msg.snapshot.history) {
+          addMessage(m.role, m.content);
+        }
+        return;
+      }
+      // Поток событий — в основной чат пускаем ТОЛЬКО реплики и системные алерты.
+      // Всё остальное (routed / skill_result / user_input-эхо / health / channel_state)
+      // — это debug; пишем в console, чтоб не мусорить Боссу.
+      if (msg.event) {
+        const ev = msg.event;
+        if (ev.type === 'user_input' && ev.channel !== 'web_hud') {
+          // input из другого канала (Telegram/Voice) — показываем в HUD как реплику Босса
+          addMessage('user', ev.data.text);
+          lastEvent.textContent = ev.type;
+        } else if (ev.type === 'assistant_reply') {
+          addMessage('assistant', ev.data.text);
+          lastEvent.textContent = ev.type;
+          if (ev.channel === 'web_hud') {
+            pending = false;
+            send.disabled = false;
+            input.focus();
+          }
+        } else if (ev.type === 'system' && ev.data && ev.data.text) {
+          // системные алерты — таймер сработал, будильник, и т.п.
+          addMessage('assistant', ev.data.text);
+          lastEvent.textContent = ev.type;
+        } else {
+          // routed / skill_result / health / channel_state / user_input-echo
+          console.debug('[bus]', ev.type, ev);
+          lastEvent.textContent = ev.type;
+        }
+      }
+    };
+  }
+
+  function submit() {
+    const text = input.value.trim();
+    if (!text || pending) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    addMessage('user', text);
+    ws.send(JSON.stringify({text}));
+    input.value = '';
+    pending = true;
+    send.disabled = true;
+  }
+  send.onclick = submit;
+  input.onkeydown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
+  };
+
+  connect();
+
+  // ═══════════════════════════════════════════════════════════
+  // C16: Network state + provider availability в sidebar
+  // ═══════════════════════════════════════════════════════════
+  function applyNetworkStatus(j) {
+    const owner = document.getElementById('owner');
+    if (j.owner) owner.textContent = j.owner;
+    const net = (j.network || {}).state || 'unknown';
+    const netEl = document.getElementById('net-state');
+    const netLed = document.getElementById('net-state-led');
+    netEl.textContent = net;
+    netLed.className = 'status-led ' + (
+      net === 'online' ? 'led-ok' :
+      net === 'partial' ? 'led-warn' :
+      net === 'offline' ? 'led-err' : 'led-warn'
+    );
+    const provs = j.providers || {};
+    const list = document.getElementById('provider-list');
+    const entries = Object.entries(provs);
+    if (entries.length === 0) {
+      list.textContent = '—';
+    } else {
+      list.innerHTML = entries.map(([name, ok]) => {
+        const short = name.length > 16 ? name.substring(0, 14) + '…' : name;
+        const color = ok ? 'var(--ok)' : 'var(--err)';
+        const mark = ok ? '✓' : '✗';
+        return `<span style="color:${color}" title="${name}">${mark} ${short}</span>`;
+      }).join('<br>');
+    }
+  }
+  function refreshStatus() {
+    fetch('/api/status').then(r => r.json()).then(applyNetworkStatus).catch(() => {});
+  }
+  refreshStatus();
+  // Раз в 15 сек обновляем сетевой статус (watchdog поллит 30s, но HUD тянем чаще)
+  setInterval(refreshStatus, 15000);
+
+  // ═══════════════════════════════════════════════════════════
+  // C14: Tabs + Logs panel
+  // ═══════════════════════════════════════════════════════════
+
+  const chatPanel = document.getElementById('chat-panel');
+  const logsPanel = document.getElementById('logs-panel');
+  const chatFooter = document.getElementById('chat-footer');
+  const logSourceEl = document.getElementById('log-source');
+  const logFilterEl = document.getElementById('log-filter');
+  const logPauseBtn = document.getElementById('log-pause');
+  const logClearBtn = document.getElementById('log-clear');
+  const logWrapBtn = document.getElementById('log-wrap');
+  const logsView = document.getElementById('logs-view');
+  const logSizeEl = document.getElementById('log-size');
+  const logCountEl = document.getElementById('log-count');
+  const logStatusEl = document.getElementById('log-status');
+
+  let logSSE = null;
+  let logPaused = false;
+  let logCount = 0;
+  let logFilter = '';
+  let logsInitialized = false;
+
+  function fmtBytes(n) {
+    if (!n) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    let i = 0; let v = n;
+    while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+    return v.toFixed(i === 0 ? 0 : 1) + ' ' + units[i];
+  }
+
+  function classifyLevel(line) {
+    // Цвет по уровню. ERROR > OK > WARN > INFO > debug. Case-insensitive.
+    // Ловим оба формата: structlog "[info ]" / "[error    ]" И backup "[INFO]"/"[OK]"/"[ERROR]".
+    if (/\[\s*(error|fatal|critical)\s*\]|\bERROR\b|\bFAILED\b|\bfatal:/i.test(line)) return 'lvl-error';
+    if (/\[\s*ok\s*\]|\bDONE\b/i.test(line)) return 'lvl-ok';
+    if (/\[\s*(warn|warning)\s*\]|\bWARN(ING)?\b/i.test(line)) return 'lvl-warn';
+    if (/\[\s*info\s*\]|\bINFO\b/i.test(line)) return 'lvl-info';
+    if (/\[\s*debug\s*\]/i.test(line)) return 'lvl-debug';
+    return 'lvl-debug';
+  }
+
+  function lineMatchesFilter(line) {
+    if (!logFilter) return true;
+    try {
+      // Если filter похож на regex (есть спецсимволы) — используем как regex
+      if (/[\\^$.*+?()\[\]{}|]/.test(logFilter)) {
+        return new RegExp(logFilter, 'i').test(line);
+      }
+    } catch (e) { /* invalid regex — fall through to substring */ }
+    return line.toLowerCase().includes(logFilter.toLowerCase());
+  }
+
+  function appendLogLine(line, opts = {}) {
+    const div = document.createElement('div');
+    div.className = 'log-line ' + classifyLevel(line);
+    div.textContent = line;
+    if (!lineMatchesFilter(line)) div.style.display = 'none';
+    logsView.appendChild(div);
+    logCount++;
+    logCountEl.textContent = logCount;
+    if (!logPaused) logsView.scrollTop = logsView.scrollHeight;
+  }
+
+  function clearLogsView() {
+    logsView.innerHTML = '';
+    logCount = 0;
+    logCountEl.textContent = '0';
+  }
+
+  function refreshLogSources() {
+    return fetch('/api/logs/sources').then(r => r.json()).then(srcs => {
+      const prev = logSourceEl.value;
+      logSourceEl.innerHTML = srcs.map(s => {
+        const label = `${s.name} (${s.exists ? fmtBytes(s.size_bytes) : 'нет файла'})`;
+        return `<option value="${s.id}">${label}</option>`;
+      }).join('');
+      if (prev && [...logSourceEl.options].some(o => o.value === prev)) {
+        logSourceEl.value = prev;
+      }
+    });
+  }
+
+  function startStream() {
+    if (logSSE) { logSSE.close(); logSSE = null; }
+    const src = logSourceEl.value;
+    if (!src) return;
+    logStatusEl.textContent = 'connecting…';
+    // 1. Грузим хвост
+    fetch(`/api/logs/tail?source=${encodeURIComponent(src)}&lines=200`)
+      .then(r => r.json())
+      .then(data => {
+        clearLogsView();
+        if (!data.lines || data.lines.length === 0) {
+          const empty = document.createElement('div');
+          empty.className = 'log-empty';
+          empty.textContent = 'лог пуст или файла нет';
+          logsView.appendChild(empty);
+        } else {
+          for (const line of data.lines) appendLogLine(line);
+        }
+        logSizeEl.textContent = fmtBytes(data.size_bytes || 0);
+        // 2. Подключаем SSE для live tail
+        logSSE = new EventSource(`/api/logs/stream?source=${encodeURIComponent(src)}`);
+        logSSE.onopen = () => logStatusEl.textContent = 'streaming';
+        logSSE.onerror = () => logStatusEl.textContent = 'disconnected';
+        logSSE.onmessage = (e) => {
+          try {
+            const payload = JSON.parse(e.data);
+            if (payload.line) appendLogLine(payload.line);
+          } catch (err) { /* ignore parse errors */ }
+        };
+        logSSE.addEventListener('rotate', () => {
+          // Файл пересоздался — сообщим в view и сбросим
+          appendLogLine('--- log rotated, reset ---');
+        });
+      })
+      .catch(err => {
+        logStatusEl.textContent = 'error';
+        appendLogLine(`[hud] не могу загрузить лог: ${err}`);
+      });
+  }
+
+  function stopStream() {
+    if (logSSE) { logSSE.close(); logSSE = null; }
+    logStatusEl.textContent = 'offline';
+  }
+
+  function initLogsTab() {
+    if (logsInitialized) return;
+    logsInitialized = true;
+    refreshLogSources().then(() => startStream());
+    logSourceEl.onchange = () => startStream();
+    logFilterEl.oninput = (e) => {
+      logFilter = e.target.value.trim();
+      // Перепрокатим уже отрендеренные строки через фильтр
+      for (const div of logsView.querySelectorAll('.log-line')) {
+        div.style.display = lineMatchesFilter(div.textContent) ? '' : 'none';
+      }
+    };
+    logPauseBtn.onclick = () => {
+      logPaused = !logPaused;
+      logPauseBtn.textContent = logPaused ? '▶ resume' : '⏸ pause';
+      logPauseBtn.classList.toggle('active', logPaused);
+      if (!logPaused) logsView.scrollTop = logsView.scrollHeight;
+    };
+    logClearBtn.onclick = () => clearLogsView();
+    logWrapBtn.onclick = () => {
+      const wrapped = logWrapBtn.classList.toggle('active');
+      logsView.querySelectorAll('.log-line').forEach(d => {
+        d.style.whiteSpace = wrapped ? 'pre-wrap' : 'pre';
+      });
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // C15: Metrics tab
+  // ═══════════════════════════════════════════════════════════
+  const metricsPanel = document.getElementById('metrics-panel');
+  const metricsWindowEl = document.getElementById('metrics-window');
+  const metricsRefreshBtn = document.getElementById('metrics-refresh');
+  const metricsAutoRefresh = document.getElementById('metrics-autorefresh');
+  const metricsUpdatedEl = document.getElementById('metrics-updated');
+  const metricsEmptyEl = document.getElementById('metrics-empty');
+  const metricsBodyEl = document.getElementById('metrics-body');
+  const metricsCardsEl = document.getElementById('metrics-cards');
+  const metricsProvidersEl = document.getElementById('metrics-providers');
+  const metricsEventsTbodyEl = document.getElementById('metrics-events-tbody');
+  let metricsInterval = null;
+  let metricsCharts = {};  // chartId -> Chart instance
+
+  function fmtMs(n) {
+    if (n == null) return '—';
+    if (n < 1000) return n + ' ms';
+    return (n / 1000).toFixed(2) + ' s';
+  }
+  function fmtTime(ts) {
+    const d = new Date(ts * 1000);
+    const pad = (x) => String(x).padStart(2, '0');
+    return pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+  }
+
+  function renderCards(summary) {
+    const counts = summary.counts || {};
+    const lat = summary.latency_ms || {};
+    const e2e = lat.e2e || {};
+    const stt = lat.stt || {};
+    const llm = lat.llm || {};
+    const tts = lat.tts || {};
+    const c = (label, value, sub, cls) =>
+      `<div class="card ${cls || ''}"><div class="card-label">${label}</div>` +
+      `<div class="card-value">${value}</div>` +
+      (sub ? `<div class="card-sub">${sub}</div>` : '') + '</div>';
+    metricsCardsEl.innerHTML = [
+      c('Команд (user_input)', counts.user_input?.total ?? 0,
+        counts.user_input?.failed ? `errors: ${counts.user_input.failed}` : ''),
+      c('Ответов (e2e)', counts.e2e?.total ?? 0,
+        e2e.n ? `avg ${fmtMs(e2e.avg)} · p95 ${fmtMs(e2e.p95)}` : '', 'ok'),
+      c('STT latency p95', fmtMs(stt.p95), stt.n ? `n=${stt.n} · avg ${fmtMs(stt.avg)}` : ''),
+      c('LLM latency p95', fmtMs(llm.p95), llm.n ? `n=${llm.n} · avg ${fmtMs(llm.avg)}` : ''),
+      c('TTS latency p95', fmtMs(tts.p95), tts.n ? `n=${tts.n} · avg ${fmtMs(tts.avg)}` : ''),
+      c('Barge-in', counts.barge_in?.total ?? 0, '', 'warn'),
+      c('Speaker reject', counts.speaker_reject?.total ?? 0, '', 'warn'),
+      c('Fallback', counts.fallback?.total ?? 0, counts.fallback?.total ? 'провайдер падал' : '',
+        counts.fallback?.total ? 'err' : ''),
+      c('Wake', counts.wake?.total ?? 0, ''),
+    ].join('');
+  }
+
+  function renderProviders(summary) {
+    const providers = summary.providers || {};
+    const blocks = [];
+    for (const [eventType, provs] of Object.entries(providers)) {
+      const total = Object.values(provs).reduce((a, b) => a + b, 0);
+      const rows = Object.entries(provs)
+        .sort((a, b) => b[1] - a[1])
+        .map(([p, n]) => {
+          const pct = total > 0 ? (n / total * 100).toFixed(1) : 0;
+          const barW = Math.max(2, Math.round(n / total * 60));
+          return `<div class="provider-row">` +
+            `<span class="name"><span class="bar" style="width:${barW}px"></span>${p}</span>` +
+            `<span class="count">${n} <span style="color:var(--muted)">(${pct}%)</span></span>` +
+            `</div>`;
+        }).join('');
+      blocks.push(`<div class="provider-block"><h4>${eventType}</h4>${rows}</div>`);
+    }
+    metricsProvidersEl.innerHTML = blocks.join('') || '<div style="color:var(--muted);padding:20px;text-align:center;">пока нет данных</div>';
+  }
+
+  function buildChart(canvasId, label, points, color) {
+    const ctx = document.getElementById(canvasId);
+    if (!ctx) return;
+    if (metricsCharts[canvasId]) {
+      metricsCharts[canvasId].destroy();
+    }
+    const labels = points.map(p => fmtTime(p.ts));
+    const data = points.map(p => p.avg_ms);
+    metricsCharts[canvasId] = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: label,
+          data: data,
+          borderColor: color,
+          backgroundColor: color + '20',
+          fill: true,
+          tension: 0.25,
+          pointRadius: 2,
+        }]
+      },
+      options: {
+        animation: false,
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: '#8a93a6', maxTicksLimit: 8 }, grid: { color: '#1f2530' } },
+          y: {
+            ticks: { color: '#8a93a6', callback: (v) => v + ' ms' },
+            grid: { color: '#1f2530' },
+            beginAtZero: true,
+          }
+        }
+      }
+    });
+  }
+
+  function renderEvents(events) {
+    if (!events.length) {
+      metricsEventsTbodyEl.innerHTML = '<tr><td colspan="6" style="color:var(--muted);text-align:center;padding:20px">пока нет событий</td></tr>';
+      return;
+    }
+    metricsEventsTbodyEl.innerHTML = events.slice(0, 80).map(e =>
+      `<tr>` +
+      `<td>${fmtTime(e.ts)}</td>` +
+      `<td class="et-${e.event_type}">${e.event_type}</td>` +
+      `<td style="color:var(--muted)">${e.channel || '—'}</td>` +
+      `<td>${e.provider || '—'}</td>` +
+      `<td>${e.duration_ms != null ? fmtMs(e.duration_ms) : '—'}</td>` +
+      `<td>${e.success ? '✓' : '<span style="color:var(--err)">✗</span>'}</td>` +
+      `</tr>`
+    ).join('');
+  }
+
+  async function loadMetrics() {
+    const w = metricsWindowEl.value;
+    try {
+      const [summary, e2eTs, sttTs, llmTs, events] = await Promise.all([
+        fetch(`/api/metrics/summary?window=${w}`).then(r => r.json()),
+        fetch(`/api/metrics/timeseries?event_type=e2e&window=${w}`).then(r => r.json()),
+        fetch(`/api/metrics/timeseries?event_type=stt&window=${w}`).then(r => r.json()),
+        fetch(`/api/metrics/timeseries?event_type=llm&window=${w}`).then(r => r.json()),
+        fetch(`/api/metrics/events?limit=80`).then(r => r.json()),
+      ]);
+
+      if (summary.enabled === false) {
+        metricsEmptyEl.style.display = 'block';
+        metricsEmptyEl.textContent = 'metrics отключены (БД недоступна)';
+        metricsBodyEl.style.display = 'none';
+        return;
+      }
+      const totalEvents = Object.values(summary.counts || {}).reduce((a, b) => a + (b.total || 0), 0);
+      if (totalEvents === 0) {
+        metricsEmptyEl.style.display = 'block';
+        metricsEmptyEl.textContent = 'нет данных за выбранное окно. Поговори с Джарвисом — метрики появятся.';
+        metricsBodyEl.style.display = 'none';
+        return;
+      }
+      metricsEmptyEl.style.display = 'none';
+      metricsBodyEl.style.display = 'block';
+
+      renderCards(summary);
+      renderProviders(summary);
+      buildChart('chart-e2e', 'e2e avg ms', e2eTs.points || [], '#5ee0a2');
+      buildChart('chart-stt', 'stt avg ms', sttTs.points || [], '#7fc7ff');
+      buildChart('chart-llm', 'llm avg ms', llmTs.points || [], '#c89bff');
+      renderEvents(events.events || []);
+
+      metricsUpdatedEl.textContent = new Date().toLocaleTimeString();
+    } catch (e) {
+      metricsEmptyEl.style.display = 'block';
+      metricsEmptyEl.textContent = 'ошибка загрузки: ' + e.message;
+      metricsBodyEl.style.display = 'none';
+    }
+  }
+
+  function startMetricsAutoRefresh() {
+    stopMetricsAutoRefresh();
+    if (metricsAutoRefresh.checked) {
+      metricsInterval = setInterval(loadMetrics, 10000);
+    }
+  }
+  function stopMetricsAutoRefresh() {
+    if (metricsInterval) { clearInterval(metricsInterval); metricsInterval = null; }
+  }
+
+  metricsRefreshBtn.onclick = () => loadMetrics();
+  metricsWindowEl.onchange = () => loadMetrics();
+  metricsAutoRefresh.onchange = () => startMetricsAutoRefresh();
+
+  // ── Goals tab ────────────────────────────────────────────────
+  const goalsPanel = document.getElementById('goals-panel');
+  const goalsRefreshBtn = document.getElementById('goals-refresh');
+  const goalsShowDone = document.getElementById('goals-show-done');
+  const goalsAutoRefresh = document.getElementById('goals-autorefresh');
+  const goalsUpdated = document.getElementById('goals-updated');
+  const goalsEmpty = document.getElementById('goals-empty');
+  const goalsList = document.getElementById('goals-list');
+  let goalsAutoRefreshTimer = null;
+
+  function classifyPace(pace_text) {
+    // pace_text — это что вернул _format_pace без скобок:
+    //   'идёшь по графику, 5 дн до дедлайна'
+    //   'опережаешь на 2, 5 дн до дедлайна'
+    //   'отстаёшь на 3, 5 дн до дедлайна'
+    if (!pace_text) return '';
+    if (pace_text.includes('опережаешь')) return 'over';
+    if (pace_text.includes('отстаёшь')) return 'behind';
+    return '';
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[c]));
+  }
+
+  function renderGoal(g) {
+    const paceCls = classifyPace(g.pace_text);
+    const barCls = paceCls === 'over' ? 'over' : (paceCls === 'behind' ? 'behind' : '');
+    const completedCls = g.completed_at ? ' completed' : '';
+    const checkmark = g.completed_at ? ' ✓' : '';
+    const pctDisplay = g.percent >= 100 ? '100%' : g.percent.toFixed(0) + '%';
+    const deadline = g.days_left == null
+      ? ''
+      : (g.days_left < 0
+          ? `<span style="color:var(--err)">просрочен на ${-g.days_left} дн</span>`
+          : g.days_left === 0
+            ? '<span style="color:var(--warn)">сегодня дедлайн</span>'
+            : `${g.days_left} дн до дедлайна`);
+    return `
+      <div class="goal-card${completedCls}">
+        <div class="goal-head">
+          <div class="goal-name"><span class="gid">#${g.id}${checkmark}</span>${escapeHtml(g.name)}</div>
+          <div class="goal-numbers"><b>${g.current}</b>/${g.target} ${escapeHtml(g.unit)} · ${pctDisplay}</div>
+        </div>
+        <div class="goal-bar-wrap">
+          <div class="goal-bar-fill ${barCls}" style="width:${Math.min(100, g.percent)}%"></div>
+        </div>
+        <div class="goal-meta">
+          <span class="goal-pace ${paceCls}">${escapeHtml(g.pace_text || '—')}</span>
+          <span>${deadline}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  async function loadGoals() {
+    try {
+      const includeCompleted = goalsShowDone.checked ? '?include_completed=true' : '';
+      const r = await fetch('/api/goals' + includeCompleted);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const data = await r.json();
+      goalsUpdated.textContent = new Date().toLocaleTimeString('ru-RU');
+      if (!data.goals || data.goals.length === 0) {
+        goalsList.style.display = 'none';
+        goalsEmpty.style.display = 'block';
+        goalsEmpty.innerHTML = 'Активных целей нет.<span class="hint">Скажи Джарвису «новая цель: написать 5 статей до конца месяца».</span>';
+        return;
+      }
+      goalsList.innerHTML = data.goals.map(renderGoal).join('');
+      goalsList.style.display = 'block';
+      goalsEmpty.style.display = 'none';
+    } catch (e) {
+      goalsList.style.display = 'none';
+      goalsEmpty.style.display = 'block';
+      goalsEmpty.textContent = 'Ошибка загрузки целей: ' + e.message;
+    }
+  }
+
+  function startGoalsAutoRefresh() {
+    stopGoalsAutoRefresh();
+    if (goalsAutoRefresh.checked) {
+      goalsAutoRefreshTimer = setInterval(loadGoals, 15000);
+    }
+  }
+  function stopGoalsAutoRefresh() {
+    if (goalsAutoRefreshTimer) { clearInterval(goalsAutoRefreshTimer); goalsAutoRefreshTimer = null; }
+  }
+  goalsRefreshBtn.onclick = () => loadGoals();
+  goalsShowDone.onchange = () => loadGoals();
+  goalsAutoRefresh.onchange = () => startGoalsAutoRefresh();
+
+  // Tab switching
+  document.querySelectorAll('.tab').forEach(btn => {
+    btn.onclick = () => {
+      const target = btn.dataset.tab;
+      document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b === btn));
+      chatPanel.classList.toggle('active', target === 'chat');
+      logsPanel.classList.toggle('active', target === 'logs');
+      metricsPanel.classList.toggle('active', target === 'metrics');
+      goalsPanel.classList.toggle('active', target === 'goals');
+      chatFooter.style.display = target === 'chat' ? 'flex' : 'none';
+      if (target === 'logs') {
+        initLogsTab();
+        refreshLogSources();
+      } else {
+        stopStream();
+      }
+      if (target === 'metrics') {
+        loadMetrics();
+        startMetricsAutoRefresh();
+      } else {
+        stopMetricsAutoRefresh();
+      }
+      if (target === 'goals') {
+        loadGoals();
+        startGoalsAutoRefresh();
+      } else {
+        stopGoalsAutoRefresh();
+      }
+    };
+  });
+</script>
+
+</body>
+</html>

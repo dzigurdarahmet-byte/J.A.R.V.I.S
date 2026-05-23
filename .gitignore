@@ -1,0 +1,88 @@
+# ============================================================
+# JARVIS .gitignore — PUBLIC repo safety
+# Public github.com/dzigurdarahmet-byte/J.A.R.V.I.S
+# Бэкапим ТОЛЬКО: код, конфиги, скрипты, документация
+# НЕ бэкапим: ничего из workspace/, ничего из .secrets/, биометрию
+# Приватные данные → отдельный encrypted backup (scripts/backup_private.ps1)
+# ============================================================
+
+# === SECRETS — NEVER commit ===
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+*.credentials.json
+*token.json
+github_pat
+github_pat.txt
+jarvis/.secrets/
+
+# === Биометрия + ВСЁ runtime memory (НЕ в Public!) ===
+jarvis/workspace/*
+!jarvis/workspace/.gitkeep
+*.npy
+
+# === Audio runtime ===
+*.wav
+*.ogg
+*.mp3
+*.opus
+
+# === Логи ===
+logs/
+*.log
+*.err
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# === Node ===
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.next/
+dist/
+build/
+
+# === OS ===
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# === IDE ===
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# === Build artifacts ===
+*.zip
+*.tar.gz
+*.exe
+*.dmg
+
+# === ML модели (тяжёлые) ===
+models/
+*.jit
+*.onnx
+*.bin
+*.safetensors
+*.ckpt
+.cache/
+
+# === Backup artifacts (приватные tarball'ы не в git) ===
+*.tar.gz.enc
+backup_private_*

@@ -1,0 +1,40 @@
+name: jarvis
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: jarvis-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --save 60 1
+      --save 300 10
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - jarvis-net
+
+  # Дополнительные сервисы добавим когда дойдём:
+  # postgres: для production storage (опционально на MVP — пока SQLite)
+  # chromadb: для Tier 3 vector store (Фаза 2)
+  # ollama: ставится отдельно на Selectel on-demand
+  # jarvis-api: само ядро Джарвиса, собирается из Dockerfile (когда напишем)
+
+volumes:
+  redis_data:
+    driver: local
+
+networks:
+  jarvis-net:
+    driver: bridge

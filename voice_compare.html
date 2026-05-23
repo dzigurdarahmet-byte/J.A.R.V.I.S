@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>J.A.R.V.I.S. — Голоса для сравнения</title>
+<style>
+  body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 24px; background: #0f1116; color: #e8eaf0; }
+  h1 { font-size: 22px; margin-bottom: 8px; }
+  h2 { font-size: 16px; margin-top: 32px; color: #6ea8ff; border-bottom: 1px solid #2a2f3a; padding-bottom: 6px; }
+  .row { display: grid; grid-template-columns: 130px 1fr 200px; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px dashed #2a2f3a; }
+  .name { font-weight: 600; color: #fff; }
+  .gender { color: #9da5b3; font-size: 13px; }
+  audio { width: 100%; }
+  .quote { background: #1a1d26; padding: 12px 16px; border-left: 3px solid #6ea8ff; margin: 16px 0; border-radius: 4px; }
+  a { color: #6ea8ff; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; margin-left: 6px; }
+  .b-free { background: #1e3a23; color: #7fd391; }
+  .b-paid { background: #3a2a1e; color: #f0b070; }
+  .b-key { background: #2a2a3a; color: #b0b8d0; }
+  .cloud-card { background: #1a1d26; padding: 14px 18px; margin: 10px 0; border-radius: 6px; }
+  .cloud-card h3 { margin: 0 0 8px; font-size: 15px; color: #fff; }
+  .cloud-card p { margin: 6px 0; color: #c0c5d0; font-size: 14px; }
+</style>
+</head>
+<body>
+
+<h1>🎤 Сравнение голосов для Джарвиса</h1>
+
+<div class="quote">
+  «Босс, я Джарвис. Анализирую обстановку. Все системы в норме. Жду ваших распоряжений.»
+  <br><span style="font-size: 12px; color: #9da5b3;">Эту фразу синтезируют локальные Silero, эту же вставь в облачные demo для честного сравнения.</span>
+</div>
+
+<h2>🟢 Silero v3 — локально, бесплатно, уже в стеке</h2>
+
+<div class="row">
+  <div><span class="name">aidar</span><br><span class="gender">мужской, взрослый</span></div>
+  <audio controls src="file:///C:/Users/Staho/AppData/Local/Temp/jarvis_voice_aidar.wav"></audio>
+  <span class="badge b-free">free, local</span>
+</div>
+
+<div class="row">
+  <div><span class="name">eugene</span><br><span class="gender">мужской, моложе</span></div>
+  <audio controls src="file:///C:/Users/Staho/AppData/Local/Temp/jarvis_voice_eugene.wav"></audio>
+  <span class="badge b-free">free, local</span>
+</div>
+
+<div class="row">
+  <div><span class="name">baya</span><br><span class="gender">женский</span></div>
+  <audio controls src="file:///C:/Users/Staho/AppData/Local/Temp/jarvis_voice_baya.wav"></audio>
+  <span class="badge b-free">free, local</span>
+</div>
+
+<div class="row">
+  <div><span class="name">kseniya</span><br><span class="gender">женский, нейтральный</span></div>
+  <audio controls src="file:///C:/Users/Staho/AppData/Local/Temp/jarvis_voice_kseniya.wav"></audio>
+  <span class="badge b-free">free, local</span>
+</div>
+
+<div class="row">
+  <div><span class="name">xenia</span><br><span class="gender">женский, ярче</span></div>
+  <audio controls src="file:///C:/Users/Staho/AppData/Local/Temp/jarvis_voice_xenia.wav"></audio>
+  <span class="badge b-free">free, local</span>
+</div>
+
+<h2>🟡 Облачные сервисы — звучат как реальный диктор, нужны ключи</h2>
+
+<div class="cloud-card">
+  <h3>Yandex SpeechKit <span class="badge b-key">нужен ключ</span> <span class="badge b-paid">~$1.40/1000 запросов</span></h3>
+  <p>Лучший RU TTS в облаке. Российский провайдер, легально, есть бесплатный grace 5000₽ на новых аккаунтах.</p>
+  <p><strong>Голоса для проверки:</strong> filipp, alexander, ermil, madirus (мужские); jane, alena, omazh (женские)</p>
+  <p>👉 <a href="https://yandex.cloud/ru/services/speechkit#demo" target="_blank">cloud.yandex.ru/services/speechkit#demo</a> — вставь фразу выше, послушай каждый голос</p>
+</div>
+
+<div class="cloud-card">
+  <h3>ElevenLabs <span class="badge b-key">нужен ключ</span> <span class="badge b-paid">~$5/мес базовый</span></h3>
+  <p>Мировой топ. Живая речь, можно клонировать твой голос по 6-секундному сэмплу. Через VPN (у тебя есть).</p>
+  <p><strong>RU голоса для проверки:</strong> Daniel, Nikita, Alex (мужские); ищи в Voice Library с фильтром Language=Russian</p>
+  <p>👉 <a href="https://elevenlabs.io/text-to-speech" target="_blank">elevenlabs.io/text-to-speech</a> — без регистрации можно сгенерить пару фраз</p>
+</div>
+
+<div class="cloud-card">
+  <h3>OpenAI TTS <span class="badge b-key">нужен ключ</span> <span class="badge b-paid">$15/M chars</span></h3>
+  <p>Голоса <strong>alloy, echo, fable, onyx, nova, shimmer</strong>. Onyx — лучший мужской, глубокий. По-русски с лёгким акцентом, но звучит дорого.</p>
+  <p>👉 <a href="https://platform.openai.com/docs/guides/text-to-speech" target="_blank">platform.openai.com/docs/guides/text-to-speech</a> (примеры в документации)</p>
+</div>
+
+<div class="cloud-card">
+  <h3>Azure Speech (Microsoft) <span class="badge b-key">нужен ключ</span> <span class="badge b-paid">~$16/M chars</span></h3>
+  <p>RU голоса <strong>DmitryNeural</strong> (м) и <strong>SvetlanaNeural</strong> (ж). Стабильно, нейтрально.</p>
+  <p>👉 <a href="https://speech.microsoft.com/portal/voicegallery" target="_blank">speech.microsoft.com/portal/voicegallery</a> — фильтр Russian (Russia), послушай прямо в галерее</p>
+</div>
+
+<div class="cloud-card">
+  <h3>GigaChat / SaluteSpeech (Сбер) <span class="badge b-key">нужен ключ</span> <span class="badge b-paid">бесплатный tier есть</span></h3>
+  <p>Российская альтернатива Yandex'у. Голоса May (ж), Bys (м), Nec (м), Nec_24000 (м).</p>
+  <p>👉 <a href="https://developers.sber.ru/portal/products/salutespeech" target="_blank">developers.sber.ru/portal/products/salutespeech</a></p>
+</div>
+
+<h2>🔵 Локально + premium качество (без облака)</h2>
+
+<div class="cloud-card">
+  <h3>XTTS-v2 (Coqui) <span class="badge b-free">free, local</span></h3>
+  <p>Open-source, voice cloning по 6 сек сэмпла. На CPU работает медленно (~2x realtime), но HD-качество. Когда появится GPU — будет мгновенно.</p>
+  <p>Поставить: ~30 минут (модель ~2 GB). Я готов установить, если выберешь.</p>
+</div>
+
+<p style="margin-top: 40px; color: #9da5b3; font-size: 13px;">
+После прослушивания скажи, что выбрал — поставлю провайдер в .env и Джарвис заговорит этим голосом.
+</p>
+
+</body>
+</html>

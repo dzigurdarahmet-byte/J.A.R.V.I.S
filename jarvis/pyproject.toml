@@ -1,0 +1,80 @@
+[project]
+name = "jarvis"
+version = "0.1.0"
+description = "J.A.R.V.I.S. — персональный голосовой ИИ-ассистент"
+authors = [{ name = "Sergey Stahovskiy", email = "dzigurdarahmet@gmail.com" }]
+requires-python = ">=3.13"
+
+dependencies = [
+    # === Web / API ===
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "websockets>=14.0",
+    "httpx>=0.28",
+    # === Telegram ===
+    "aiogram>=3.15",
+    # === LLM Providers ===
+    "anthropic>=0.40",
+    # === Event Bus / Storage ===
+    "redis[hiredis]>=5.2",
+    "aiosqlite>=0.20",
+    # === Config / Validation ===
+    "python-dotenv>=1.0",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.7",
+    "pyyaml>=6.0",
+    # === Logging / Observability ===
+    "structlog>=24.4",
+    "prometheus-client>=0.21",
+    # === Voice (CPU mode) ===
+    "faster-whisper>=1.1",
+    "torch>=2.5",          # CPU-only до GPU
+    "torchaudio>=2.5",
+    "soundfile>=0.12",
+    "numpy>=2.0",
+    # === Utilities ===
+    "rapidfuzz>=3.10",
+    "python-multipart>=0.0.19",
+    "pillow>=11.0",
+    "aiohttp-socks>=0.11.0",
+    "sounddevice>=0.5.5",
+    "silero-vad>=6.2.1",
+    "pynput>=1.8.2",
+    "omegaconf>=2.3.0",
+    "ruaccent>=1.5.8.3",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "ipython>=8.30",
+    "httpx>=0.28",  # для TestClient
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "W", "N", "RUF"]
+ignore = ["E501"]  # line-length handled by formatter
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.mypy]
+python_version = "3.13"
+strict_optional = true
+warn_unused_ignores = true
+warn_return_any = true
+warn_redundant_casts = true
+ignore_missing_imports = true
